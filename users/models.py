@@ -1,6 +1,15 @@
 import uuid
+import hashlib
 from django.db import models
 from datetime import datetime
+
+
+def verify_password(password, stored_hash):
+    try:
+        salt, hashed = stored_hash.split('$', 1)
+        return hashlib.sha256((password + salt).encode()).hexdigest() == hashed
+    except (ValueError, AttributeError):
+        return False
 
 
 class User(models.Model):
@@ -32,6 +41,9 @@ class User(models.Model):
 
     class Meta:
         db_table = 'users'
+
+    def check_password(self, password):
+        return verify_password(password, self.password_hash)
 
 
 class UserAddress(models.Model):
