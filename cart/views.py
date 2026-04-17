@@ -135,35 +135,35 @@ def add_to_cart(request):
 
         variant_id = parse_uuid(variant_id_raw)
 
-        # ── Fetch product from database to get name/price ────────────────────────
+# ── Fetch product from database to get name/price ────────────────────────
         product_name  = request.data.get('product_name', '')
-    product_image = request.data.get('product_image', '')
-    product_slug  = request.data.get('product_slug', '')
-    unit_price    = request.data.get('unit_price')
+        product_image = request.data.get('product_image', '')
+        product_slug  = request.data.get('product_slug', '')
+        unit_price    = request.data.get('unit_price')
 
-    if not unit_price or not product_name:
-        try:
-            from products.models import Product
-            products = list(Product.objects.filter(product_id=product_id))
-            if products:
-                p             = products[0]
-                product_name  = product_name  or p.name
-                product_image = product_image or p.main_image or ''
-                product_slug  = product_slug  or p.slug or ''
-                unit_price    = unit_price    or float(p.price)
-            else:
+        if not unit_price or not product_name:
+            try:
+                from products.models import Product
+                products = list(Product.objects.filter(product_id=product_id))
+                if products:
+                    p             = products[0]
+                    product_name  = product_name  or p.name
+                    product_image = product_image or p.main_image or ''
+                    product_slug  = product_slug  or p.slug or ''
+                    unit_price    = unit_price    or float(p.price)
+                else:
+                    return Response(
+                        {'error': 'Product not found'},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+            except Exception as e:
                 return Response(
-                    {'error': 'Product not found'},
-                    status=status.HTTP_404_NOT_FOUND
+                    {'error': f'Could not fetch product details: {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
-        except Exception as e:
-            return Response(
-                {'error': f'Could not fetch product details: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
 
-    unit_price = float(unit_price)
-    quantity   = int(request.data.get('quantity', 1))
+        unit_price = float(unit_price)
+        quantity   = int(request.data.get('quantity', 1))
 
     # ── Check if item already exists in cart ──────────────────────────────────
     existing_items = list(CartItem.objects.filter(
@@ -216,9 +216,6 @@ def add_to_cart(request):
     print(f"[DEBUG] add_to_cart - cart_id: {cart.cart_id}, user_id: {cart.user_id}, session_id: {cart.session_id}, items_count: {len(cart_items)}")
 
     return Response(cart_data, status=status.HTTP_200_OK)
-    except Exception as e:
-        print(f"[add_to_cart] Error: {e}", file=sys.stderr, flush=True)
-        return Response({'error': 'Failed to add item to cart'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['PUT'])
