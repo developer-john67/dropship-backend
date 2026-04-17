@@ -39,74 +39,82 @@ def get_user_from_token(request):
 @permission_classes([permissions.AllowAny])
 def register(request):
     """Register a new user — requires email verification before login."""
-    username = request.data.get('username', '').strip()
-    email    = request.data.get('email', '').strip()
-    password = request.data.get('password', '')
-
-    if not username:
-        return Response({'error': 'Username is required.'}, status=status.HTTP_400_BAD_REQUEST)
-    if not email:
-        return Response({'error': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
-    if not password:
-        return Response({'error': 'Password is required.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
-        return Response({'error': 'Please enter a valid email address.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    if len(password) < 8:
-        return Response({'error': 'Password must be at least 8 characters.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    # If email exists but is unverified, delete and allow re-registration
-    existing_user = User.objects.filter(email=email).first()
-    if existing_user:
-        if existing_user.email_verified:
-            return Response({'error': 'Email already registered.'}, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            existing_user.delete()
-
-    if User.objects.filter(username=username).exists():
-        return Response({'error': 'Username already taken.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    # ✅ Use create_user — handles password hashing automatically
-    user = User.objects.create_user(
-        username=username,
-        email=email,
-        password=password,
-        is_active=True,
-        email_verified=False,
-    )
-
-    from users.email_service import generate_6digit_code, send_verification_email
-
-    EmailVerification.objects.filter(email=email, is_verified=False).delete()
-
-    code = generate_6digit_code()
-    expires_at = timezone.now() + timedelta(minutes=15)
-
-    EmailVerification.objects.create(
-        email=email,
-        code=code,
-        purpose='email_verify',
-        user=user,
-        expires_at=expires_at,
-    )
-
-    send_verification_email(email, code, 'email_verify')
-
     import sys
-    print(f"[REGISTER] Verification email sent to {email}", file=sys.stderr, flush=True)
+    
+    try:
+        username = request.data.get('username', '').strip()
+        email    = request.data.get('email', '').strip()
+        password = request.data.get('password', '')
 
-    return Response(
-        {
-            'message': 'Registration successful. Please check your email for the verification code.',
-            'user_id': str(user.user_id),
-            'email': user.email,
-            'username': user.username,
-            'email_verified': False,
-            'verification_required': True,
-        },
-        status=status.HTTP_201_CREATED,
-    )
+        if not username:
+            return Response({'error': 'Username is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not email:
+            return Response({'error': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not password:
+            return Response({'error': 'Password is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
+            return Response({'error': 'Please enter a valid email address.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(password) < 8:
+            return Response({'error': 'Password must be at least 8 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # If email exists but is unverified, delete and allow re-registration
+        existing_user = User.objects.filter(email=email).first()
+        if existing_user:
+            if existing_user.email_verified:
+                return Response({'error': 'Email already registered.'}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                existing_user.delete()
+
+        if User.objects.filter(username=username).exists():
+            return Response({'error': 'Username already taken.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Use create_user — handles password hashing automatically
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            is_active=True,
+            email_verified=False,
+        )
+
+        from verification.email_service import generate_6digit_code, send_verification_email
+
+        EmailVerification.objects.filter(email=email, is_verified=False).delete()
+
+        code = generate_6digit_code()
+        expires_at = timezone.now() + timedelta(minutes=15)
+
+        EmailVerification.objects.create(
+            email=email,
+            code=code,
+            purpose='email_verify',
+            user=user,
+            expires_at=expires_at,
+        )
+
+        # Send email in background (won't block on errors)
+        try:
+            send_verification_email(email, code, 'email_verify')
+            print(f"[REGISTER] Verification email sent to {email}", file=sys.stderr, flush=True)
+        except Exception as email_err:
+            print(f"[REGISTER] Email sending failed: {email_err}", file=sys.stderr, flush=True)
+
+        return Response(
+            {
+                'message': 'Registration successful. Please check your email for the verification code.',
+                'user_id': str(user.user_id),
+                'email': user.email,
+                'username': user.username,
+                'email_verified': False,
+                'verification_required': True,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+    except Exception as e:
+        print(f"[REGISTER] Error: {e}", file=sys.stderr, flush=True)
+        return Response({'error': 'Registration failed. Please try again.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
@@ -220,7 +228,7 @@ def verify_email(request):
 
     # Welcome email — failure here does not break verification
     try:
-        from users.email_service import send_welcome_email
+        from verification.email_service import send_welcome_email
         send_welcome_email(user.email, user.username)
     except Exception:
         pass
@@ -245,7 +253,7 @@ def resend_verification(request):
     if user.email_verified:
         return Response({'message': 'Email already verified.'})
 
-    from users.email_service import generate_6digit_code, send_verification_email
+    from verification.email_service import generate_6digit_code, send_verification_email
 
     EmailVerification.objects.filter(email=email, is_verified=False).delete()
 
