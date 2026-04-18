@@ -45,7 +45,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
-    'storages',       # ← S3 storage backend
+    'storages',
     'shop',
     'products',
     'cart',
@@ -56,13 +56,13 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',          # Must be first
+    'corsheaders.middleware.CorsMiddleware',
     'dropship_backend.middleware.CSRFExemptMiddleware',
     'dropship_backend.middleware.RequestSanitizationMiddleware',
     'dropship_backend.middleware.SQLInjectionProtectionMiddleware',
     'dropship_backend.middleware.RateLimitMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',     # ← serves static files on Render
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -95,6 +95,10 @@ WSGI_APPLICATION = 'dropship_backend.wsgi.application'
 
 
 # ─── Database ─────────────────────────────────────────────────────────────────
+# conn_max_age=0  → Django closes the DB connection after every request.
+# DISABLE_SERVER_SIDE_CURSORS=True → required when using PgBouncer
+#   transaction-mode pooling (Render's built-in pooler).
+# Together these two settings prevent connection exhaustion on the free tier.
 
 DATABASE_URL = os.getenv('DATABASE_URL')
 
@@ -102,10 +106,12 @@ if DATABASE_URL:
     DATABASES = {
         'default': dj_database_url.config(
             default=DATABASE_URL,
-            conn_max_age=60,
+            conn_max_age=0,         # ← close connection after each request
             ssl_require=not DEBUG,
         )
     }
+    # Required for PgBouncer transaction mode (Render connection pooling)
+    DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
 else:
     DATABASES = {
         'default': {
@@ -115,7 +121,7 @@ else:
             'PASSWORD': os.getenv('DB_PASSWORD', '_aecj@20Un#'),
             'HOST': os.getenv('DB_HOST', 'localhost'),
             'PORT': os.getenv('DB_PORT', '5432'),
-            'CONN_MAX_AGE': 60,
+            'CONN_MAX_AGE': 0,
             'OPTIONS': {
                 'sslmode': os.getenv('DB_SSL_MODE', 'prefer'),
             },
@@ -155,21 +161,19 @@ AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
 AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME')
 AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME', 'us-east-1')
-AWS_S3_FILE_OVERWRITE = False        # Don't overwrite files with the same name
-AWS_DEFAULT_ACL = None               # Inherit bucket policy for access control
+AWS_S3_FILE_OVERWRITE = False
+AWS_DEFAULT_ACL = None
 AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
 AWS_S3_OBJECT_PARAMETERS = {
-    'CacheControl': 'max-age=86400', # Cache media files for 1 day
+    'CacheControl': 'max-age=86400',
 }
 
-# Use S3 for media in production, local disk for development
 if os.getenv('AWS_STORAGE_BUCKET_NAME'):
     DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
     MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
 else:
     DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
     MEDIA_URL = '/media/'
-    # Use persistent disk on Render, otherwise local
     if os.path.exists('/opt/render/project/src/media'):
         MEDIA_ROOT = '/opt/render/project/src/media'
     else:

@@ -163,3 +163,17 @@ def admin_logout(request):
     logout(request)
     return redirect('admin_login')
 
+from django.http import JsonResponse
+
+def asset_links(request):
+    data = [{
+        "relation": ["delegate_permission/common.handle_all_urls"],
+        "target": {
+            "namespace": "android_app",
+            "package_name": "com.yourname.appname",  # ← your package ID
+            "sha256_cert_fingerprints": [
+                "YOUR_SHA256_FINGERPRINT"  # ← from bubblewrap output
+            ]
+        }
+    }]
+    return JsonResponse(data, safe=False)

@@ -1,10 +1,26 @@
-/**const API_BASE = 'http://localhost:8000/api';**/
-const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:8000/api'
+/** const API_BASE = window.location.origin + '/api'; **/
+// Update this to your production backend URL
+const API_BASE = window.location.hostname === 'localhost' 
+    ? 'http://localhost:8000/api' 
     : 'https://dropship-backend-otgc.onrender.com/api';
+
+const BACKEND_URL = window.location.hostname === 'localhost'
+    ? 'http://localhost:8000'
+    : 'https://dropship-backend-otgc.onrender.com';
+
 function getCSRFToken() {
   const cookie = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='));
   return cookie ? cookie.split('=')[1] : '';
+}
+
+// ─── IMAGE URL HELPER ─────────────────────────────────────────────────────────
+function getImageUrl(product) {
+    const raw = product.main_image || product.image || product.image_url || '';
+    if (!raw) return 'https://via.placeholder.com/300x200';
+    // If already a full URL (e.g. S3), use as-is
+    if (raw.startsWith('http')) return raw;
+    // If relative path, prepend backend URL
+    return `${BACKEND_URL}${raw}`;
 }
 
 async function request(endpoint, method = 'GET', body = null) {
@@ -264,7 +280,7 @@ const Orders = {
     if (!orderData.items || orderData.items.length === 0) {
       throw new Error('Order must contain at least one item.');
     }
-    return request('/orders/', 'POST', orderData);
+    return request('/orders/create/', 'POST', orderData);
   },
 
   async cancel(id) {
