@@ -28,7 +28,8 @@ if not settings.DEBUG:
     
     # Make sure media directory exists
     import os
-    os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
+    if settings.MEDIA_ROOT:
+        os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
     
     urlpatterns += [
         re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),

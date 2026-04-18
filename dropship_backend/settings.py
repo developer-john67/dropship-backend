@@ -154,16 +154,28 @@ STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 
-# ─── Media Files (Local Storage) ──────────────────────────────────────────
+# ─── Media Files (Supabase Storage) ───────────────────────────────────────
 
-DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
-MEDIA_URL = '/media/'
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
+SUPABASE_BUCKET = os.getenv('SUPABASE_BUCKET', 'media')
 
-# Use Render's persistent disk path
-if os.path.exists('/opt/render/project/src/media'):
-    MEDIA_ROOT = '/opt/render/project/src/media'
+if SUPABASE_URL and SUPABASE_KEY:
+    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+    AWS_ACCESS_KEY_ID = SUPABASE_KEY
+    AWS_SECRET_ACCESS_KEY = SUPABASE_KEY
+    AWS_STORAGE_BUCKET_NAME = SUPABASE_BUCKET
+    AWS_S3_REGION_NAME = 'us-east-1'
+    AWS_S3_ENDPOINT_URL = f'{SUPABASE_URL}/storage/v1/s3'
+    AWS_S3_FILE_OVERWRITE = False
+    AWS_DEFAULT_ACL = 'public-read'
+    AWS_S3_CUSTOM_DOMAIN = f'{SUPABASE_URL.replace("https://", "")}/storage/v1/object/public/{SUPABASE_BUCKET}'
+    AWS_QUERYSTRING_AUTH = False
+    MEDIA_URL = f'{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/'
 else:
-    MEDIA_ROOT = os.path.join(os.path.dirname(BASE_DIR), 'media')
+    DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
+    MEDIA_URL = '/media/'
+    MEDIA_ROOT = '/opt/render/project/src/media'
 
 
 LOGIN_URL = '/admin-login/'

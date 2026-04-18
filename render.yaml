@@ -21,6 +21,12 @@ services:
         value: "noreply@dropship.com"
       - key: FRONTEND_URL
         value: "https://your-frontend.onrender.com"
+      - key: SUPABASE_URL
+        fromSecret: SUPABASE_URL
+      - key: SUPABASE_SERVICE_KEY
+        fromSecret: SUPABASE_SERVICE_KEY
+      - key: SUPABASE_BUCKET
+        value: "media"
     disk:
       name: media-files
       mountPath: /opt/render/project/src/media
