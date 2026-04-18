@@ -101,6 +101,9 @@ class ProductSerializer(serializers.Serializer):
     def get_main_image(self, obj):
         if obj.main_image:
             if obj.main_image.startswith('http'):
+                # Skip invalid S3 URLs containing "None"
+                if 'None' in obj.main_image or 'amazonaws.com' in obj.main_image:
+                    return None
                 return obj.main_image
             if obj.main_image.startswith('/'):
                 request = self.context.get('request')
