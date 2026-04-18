@@ -10,29 +10,22 @@ from .serializers import CartSerializer, CartItemSerializer
 
 
 def get_user_from_token(request):
-    import sys
     from django.utils import timezone
     auth_header = request.headers.get('Authorization', '')
     token = auth_header.split(' ')[1] if auth_header.startswith('Bearer ') else None
-    print(f"[DEBUG get_user] Token: {token[:40] if token else 'NONE'}", file=sys.stderr)
     if not token:
-        print("[DEBUG get_user] No token, returning None", file=sys.stderr)
         return None
     try:
         from users.models import UserSession, User
         sessions = list(UserSession.objects.filter(token=token))
         if not sessions:
-            print(f"[DEBUG get_user] Token NOT FOUND in DB", file=sys.stderr)
             return None
         session = sessions[0]
         if session.expires_at < timezone.now():
-            print(f"[DEBUG get_user] Session expired", file=sys.stderr)
             return None
         users = list(User.objects.filter(user_id=session.user_id))
-        print(f"[DEBUG get_user] Found user: {users[0].email if users else 'NONE'}", file=sys.stderr)
         return users[0] if users else None
-    except Exception as e:
-        print(f"[DEBUG get_user] Error: {e}", file=sys.stderr)
+    except Exception:
         return None
 
 

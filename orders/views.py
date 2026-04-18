@@ -183,12 +183,18 @@ def cancel_order(request, order_id):
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def admin_order_list(request):
-    """Admin: Get all orders"""
+    """Admin: Get all orders (default to paid only)"""
     user = get_user_from_token(request)
     if not is_admin(user):
         return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
 
+    # Default: only show PAID orders
+    payment_filter = request.query_params.get('payment_status', 'paid')
+    
     orders = list(Order.objects.all())
+    
+    if payment_filter:
+        orders = [o for o in orders if o.payment_status == payment_filter]
 
     filter_status = request.query_params.get('status')
     if filter_status:

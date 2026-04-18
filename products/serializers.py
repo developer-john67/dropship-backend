@@ -103,7 +103,7 @@ class ProductSerializer(serializers.Serializer):
             if obj.main_image.startswith('http'):
                 # Skip invalid S3 URLs containing "None"
                 if 'None' in obj.main_image or 'amazonaws.com' in obj.main_image:
-                    return None
+                    return 'https://placehold.co/400x400/FA7207/white?text=No+Image'
                 return obj.main_image
             if obj.main_image.startswith('/'):
                 request = self.context.get('request')
@@ -111,7 +111,8 @@ class ProductSerializer(serializers.Serializer):
                     return request.build_absolute_uri(obj.main_image)
                 return f"{get_media_base_url()}{obj.main_image}"
             return f"{get_media_base_url()}{obj.main_image}"
-        return None
+        # Return placeholder when no image
+        return 'https://placehold.co/400x400/FA7207/white?text=No+Image'
 
     # Alias so frontend can use either product.main_image or product.image_url
     def get_image_url(self, obj):
