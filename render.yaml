@@ -3,7 +3,7 @@ services:
     name: dropship-backend
     env: python
     buildCommand: ./build.sh
-    startCommand: gunicorn dropship_backend.asgi:application --workers 4 --bind 0.0.0.0:$PORT
+    startCommand: gunicorn dropship_backend.wsgi:application --workers 2 --threads 2 --timeout 120 --bind 0.0.0.0:$PORT
     envVars:
       - key: DATABASE_URL
         fromDatabase:
