@@ -1,8 +1,7 @@
 Django>=4.2,<5.0
 psycopg2-binary
 Pillow
-gunicorn
-uvicorn
+gunicorn>=20.0
 django-cors-headers
 djangorestframework
 whitenoise
