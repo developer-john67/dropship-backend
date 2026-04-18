@@ -11,3 +11,4 @@ python-dotenv
 requests
 dj-database-url
 django-storages
+django-storages[s3] boto3
