@@ -1,1 +1,2 @@
-web: gunicorn dropship_backend.wsgi:application --bind 0.0.0.0:$PORT --env DEBUG=False
+# Gunicorn config is in gunicorn.conf.py
+web: gunicorn dropship_backend.wsgi:application -c gunicorn.conf.py

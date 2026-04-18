@@ -3,7 +3,7 @@ services:
     name: dropship-backend
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn dropship_backend.wsgi:application --workers 2 --timeout 120 --bind 0.0.0.0:$PORT --env DJANGO_SETTINGS_MODULE=dropship_backend.settings
+    startCommand: gunicorn dropship_backend.wsgi:application --workers 2 --timeout 120 --bind 0.0.0.0:$PORT
     envVars:
       - key: DATABASE_URL
         fromDatabase:
