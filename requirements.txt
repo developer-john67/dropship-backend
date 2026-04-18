@@ -10,4 +10,3 @@ django-ratelimit
 python-dotenv
 requests
 dj-database-url
-django-storages

@@ -6,8 +6,6 @@ from django.conf import settings
 
 
 def get_media_base_url():
-    if hasattr(settings, 'AWS_S3_CUSTOM_DOMAIN') and settings.AWS_S3_CUSTOM_DOMAIN:
-        return f"https://{settings.AWS_S3_CUSTOM_DOMAIN}/media"
     return getattr(settings, 'MEDIA_URL', '/media')
 
 MEDIA_BASE_URL = get_media_base_url()
