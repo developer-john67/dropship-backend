@@ -160,10 +160,11 @@ SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
 SUPABASE_BUCKET = os.getenv('SUPABASE_BUCKET', 'media')
 
-if SUPABASE_URL and SUPABASE_KEY:
+if SUPABASE_URL:
     DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
-    AWS_ACCESS_KEY_ID = SUPABASE_KEY
-    AWS_SECRET_ACCESS_KEY = SUPABASE_KEY
+
+    AWS_ACCESS_KEY_ID = os.getenv('SUPABASE_S3_ACCESS_KEY_ID')
+    AWS_SECRET_ACCESS_KEY = os.getenv('SUPABASE_S3_SECRET_ACCESS_KEY')
     AWS_STORAGE_BUCKET_NAME = SUPABASE_BUCKET
     AWS_S3_REGION_NAME = 'us-east-1'
     AWS_S3_ENDPOINT_URL = f'{SUPABASE_URL}/storage/v1/s3'
@@ -171,11 +172,12 @@ if SUPABASE_URL and SUPABASE_KEY:
     AWS_DEFAULT_ACL = 'public-read'
     AWS_S3_CUSTOM_DOMAIN = f'{SUPABASE_URL.replace("https://", "")}/storage/v1/object/public/{SUPABASE_BUCKET}'
     AWS_QUERYSTRING_AUTH = False
+
     MEDIA_URL = f'{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/'
 else:
     DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
     MEDIA_URL = '/media/'
-    MEDIA_ROOT = '/opt/render/project/src/media'
+    MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 
 LOGIN_URL = '/admin-login/'
