@@ -52,18 +52,16 @@ def resolve_category(category_raw):
 
 
 def save_uploaded_image(image_file):
-    """Write image to MEDIA_ROOT and return the relative path, or '' on failure."""
+    """Save image via default_storage (Supabase) and return the relative path."""
     try:
+        from django.core.files.storage import default_storage
+        from django.core.files.base import ContentFile
+
         ext      = os.path.splitext(image_file.name)[1].lower()
         filename = f"products/{uuid.uuid4()}{ext}"
-        filepath = os.path.join(settings.MEDIA_ROOT, filename)
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        with open(filepath, 'wb+') as dest:
-            for chunk in image_file.chunks():
-                dest.write(chunk)
-        return filename
+        path     = default_storage.save(filename, ContentFile(image_file.read()))
+        return path
     except Exception as e:
-        # Log and continue — don't crash the whole upload for a bad image
         print(f"[image upload error] {e}")
         return ''
 
@@ -81,11 +79,11 @@ def product_upload(request):
             is_active    = form.cleaned_data.get('is_active', True)
             category_raw = form.cleaned_data.get('category', '')
 
-            slug         = generate_unique_slug(name)            # ← fixed
+            slug         = generate_unique_slug(name)
             sku          = f"SKU-{uuid.uuid4().hex[:8].upper()}"
             image_url    = save_uploaded_image(request.FILES['image']) \
                            if 'image' in request.FILES else ''
-            category_id, category_name = resolve_category(category_raw)  # ← fixed
+            category_id, category_name = resolve_category(category_raw)
 
             Product.objects.create(
                 name          = name,
@@ -142,14 +140,14 @@ def admin_login(request):
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
-        
+
         from users.models import User
-        
+
         # Try username first, then email
         user = User.objects.filter(username=username).first()
         if not user:
             user = User.objects.filter(email=username).first()
-        
+
         if user and user.check_password(password) and is_admin(user):
             login(request, user)
             return redirect('product_upload')
@@ -162,6 +160,7 @@ def admin_login(request):
 def admin_logout(request):
     logout(request)
     return redirect('admin_login')
+
 
 from django.http import JsonResponse
 
@@ -176,4 +175,3 @@ def asset_links(request):
             ]
         }
     }]
-    return JsonResponse(data, safe=False)
