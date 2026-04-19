@@ -16,7 +16,7 @@ function getCSRFToken() {
 // ─── IMAGE URL HELPER ─────────────────────────────────────────────────────────
 function getImageUrl(product) {
     const raw = product.main_image || product.image || product.image_url || '';
-    if (!raw) return 'https://via.placeholder.com/300x200';
+    if (!raw) return 'https://placehold.co/300x200';
     // If already a full URL (e.g. S3), use as-is
     if (raw.startsWith('http')) return raw;
     // If relative path, prepend backend URL
@@ -200,7 +200,7 @@ const Products = {
     const response = await fetch(`${API_BASE}/products/`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
+        'Authorization': `Token ${token}`,
         'X-CSRFToken': getCSRFToken(),
       },
       credentials: 'include',
@@ -219,7 +219,7 @@ const Products = {
     const response = await fetch(`${API_BASE}/products/admin/${id}/`, {
       method: 'PATCH',
       headers: {
-        'Authorization': `Bearer ${token}`,
+        'Authorization': `Token ${token}`,
         'X-CSRFToken': getCSRFToken(),
       },
       credentials: 'include',
