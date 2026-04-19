@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 @permission_classes([AllowAny])
 def initiate_payment(request):
     """Initiate M-Pesa STK Push payment."""
+    import sys
+    print(f"[DEBUG] Authorization: {request.headers.get('Authorization', 'NONE')}", file=sys.stderr)
+    print(f"[DEBUG] User: {request.user}", file=sys.stderr)
+    print(f"[DEBUG] Data: {dict(request.data)}", file=sys.stderr)
+    
     phone_number = request.data.get('phone_number', '').strip()
     amount = request.data.get('amount')
     order_id = request.data.get('order_id')
