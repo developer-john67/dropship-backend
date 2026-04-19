@@ -17,10 +17,22 @@ function getCSRFToken() {
 function getImageUrl(product) {
     const raw = product.main_image || product.image || product.image_url || '';
     if (!raw) return 'https://placehold.co/300x200';
-    // If already a full URL (e.g. S3), use as-is
     if (raw.startsWith('http')) return raw;
-    // If relative path, prepend backend URL
     return `${BACKEND_URL}${raw}`;
+}
+
+// ─── PROTECTED PAGES (require login) ─────────────────────────────────────────
+const PROTECTED_PAGES = ['checkout.html', 'account.html', 'orders.html'];
+
+function isOnProtectedPage() {
+    return PROTECTED_PAGES.some(p => window.location.pathname.includes(p));
+}
+
+function redirectToLogin() {
+    const cart = localStorage.getItem('cart');
+    if (cart) sessionStorage.setItem('cart_backup', cart);
+    const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+    window.location.href = `login.html?redirect=${redirect}`;
 }
 
 async function request(endpoint, method = 'GET', body = null) {
@@ -44,10 +56,18 @@ async function request(endpoint, method = 'GET', body = null) {
 
   const response = await fetch(`${API_BASE}${endpoint}`, options);
 
-  // If token is invalid, clear it and retry without auth
+  // ─── Handle 401 ───────────────────────────────────────────────────────────
   if (response.status === 401 && token) {
     localStorage.removeItem('authToken');
     localStorage.removeItem('authUser');
+
+    if (isOnProtectedPage()) {
+      // Checkout/account — redirect to login, preserving cart
+      redirectToLogin();
+      return null;
+    }
+
+    // Public pages — retry without auth so products still load
     delete headers['Authorization'];
     const retryResponse = await fetch(`${API_BASE}${endpoint}`, { method, headers, credentials: 'include' });
     if (!retryResponse.ok) {
@@ -88,11 +108,9 @@ function validateRequired(fields) {
 const Auth = {
   async login(email, password) {
     validateRequired({ 'Email': email, 'Password': password });
-
     if (!validateEmail(email)) {
       throw new Error('Please enter a valid email address.');
     }
-
     const data = await request('/users/login/', 'POST', { email, password });
     if (data.token) {
       localStorage.setItem('authToken', data.token);
@@ -115,52 +133,38 @@ const Auth = {
 
   async register(fullName, email, password, confirmPassword) {
     validateRequired({ 'Full name': fullName, 'Email': email, 'Password': password });
-
     if (!validateEmail(email)) {
       throw new Error('Please enter a valid email address.');
     }
-
     validatePassword(password);
-
     if (confirmPassword !== undefined && password !== confirmPassword) {
       throw new Error('Passwords do not match.');
     }
-
     const data = await request('/users/register/', 'POST', {
       username: fullName.trim(),
       email: email.trim(),
       password,
     });
-
-    // Store email so the verify page can send it alongside the code
     localStorage.setItem('pendingVerificationEmail', email.trim());
-
     return data;
   },
 
-  // FIX: Now sends BOTH email and code — backend requires both fields
   async verifyEmail(code) {
     if (!code || code.toString().trim().length !== 6) {
       throw new Error('Please enter a valid 6-digit code.');
     }
-
     const email = localStorage.getItem('pendingVerificationEmail');
     if (!email) {
       throw new Error('Session expired. Please sign up again.');
     }
-
     const data = await request('/users/verify-email/', 'POST', {
       email: email,
       code: code.toString().trim(),
     });
-
-    // Clear stored email after successful verification
     localStorage.removeItem('pendingVerificationEmail');
-
     return data;
   },
 
-  // Resend a new verification code — pulls email from localStorage if not passed
   async resendVerificationCode(email) {
     const targetEmail = email || localStorage.getItem('pendingVerificationEmail');
     if (!targetEmail || !validateEmail(targetEmail)) {
@@ -169,7 +173,6 @@ const Auth = {
     return request('/users/resend-code/', 'POST', { email: targetEmail.trim() });
   },
 
-  // Check if the current user's email is verified
   async checkVerificationStatus() {
     return request('/users/verification-status/');
   },
