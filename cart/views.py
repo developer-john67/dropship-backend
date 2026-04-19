@@ -12,7 +12,12 @@ from .serializers import CartSerializer, CartItemSerializer
 def get_user_from_token(request):
     from django.utils import timezone
     auth_header = request.headers.get('Authorization', '')
-    token = auth_header.split(' ')[1] if auth_header.startswith('Bearer ') else None
+    if auth_header.startswith('Token '):
+        token = auth_header.split(' ')[1]
+    elif auth_header.startswith('Bearer '):
+        token = auth_header.split(' ')[1]
+    else:
+        token = None
     if not token:
         return None
     try:
