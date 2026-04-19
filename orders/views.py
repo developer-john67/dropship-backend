@@ -1,7 +1,8 @@
 # orders/views.py
 
 from rest_framework import status, permissions
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework.authentication import TokenAuthentication, SessionAuthentication
 from rest_framework.response import Response
 from typing import Optional
 import uuid
@@ -13,10 +14,12 @@ from dropship_backend.security import sanitize_integer, sanitize_string
 
 def get_user_from_token(request):
     auth_header = request.headers.get('Authorization', '')
-    if not auth_header.startswith('Bearer '):
+    if auth_header.startswith('Token '):
+        token = auth_header.split(' ')[1]
+    elif auth_header.startswith('Bearer '):
+        token = auth_header.split(' ')[1]
+    else:
         return None
-    
-    token = auth_header.replace('Bearer ', '')
     
     try:
         from users.models import UserSession
@@ -43,6 +46,7 @@ def is_admin(user) -> bool:
 # ─── Customer Views ───────────────────────────────────────────────────────────
 
 @api_view(['GET'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def my_orders(request):
     """Get all orders for current user"""
@@ -56,6 +60,7 @@ def my_orders(request):
 
 
 @api_view(['GET'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def order_detail(request, order_id):
     """Get single order detail"""
@@ -86,6 +91,7 @@ def order_detail(request, order_id):
 
 
 @api_view(['POST'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def create_order(request):
     """Create a new order"""
@@ -139,6 +145,7 @@ def create_order(request):
 
 
 @api_view(['POST'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def cancel_order(request, order_id):
     """Cancel an order"""
@@ -181,6 +188,7 @@ def cancel_order(request, order_id):
 # ─── Admin Views ──────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def admin_order_list(request):
     """Admin: Get all orders (default to paid only)"""
@@ -205,6 +213,7 @@ def admin_order_list(request):
 
 
 @api_view(['PATCH'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def admin_update_order_status(request, order_id):
     """Admin: Update order status"""
@@ -256,6 +265,7 @@ def admin_update_order_status(request, order_id):
 
 
 @api_view(['PATCH'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def admin_update_payment_status(request, order_id):
     """Admin: Update payment status"""
@@ -292,6 +302,7 @@ logger = logging.getLogger(__name__)
 
 
 @api_view(['POST'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def initiate_mpesa_payment(request):
     """Initiate M-Pesa STK Push payment for an order using Daraja API."""
@@ -346,6 +357,7 @@ def initiate_mpesa_payment(request):
 
 
 @api_view(['POST'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def check_mpesa_payment(request):
     """Check M-Pesa payment status using Daraja API."""
@@ -398,6 +410,7 @@ def check_mpesa_payment(request):
 
 
 @api_view(['POST'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def daraja_webhook(request):
     """Handle Daraja webhook for payment updates."""
@@ -443,6 +456,7 @@ def daraja_webhook(request):
 
 
 @api_view(['POST'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def mpesa_callback(request):
     """Handle M-Pesa payment callback (webhook)."""

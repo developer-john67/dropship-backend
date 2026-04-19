@@ -47,6 +47,7 @@ def initiate_payment(request):
 
 
 @api_view(['POST'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([AllowAny])
 def payment_callback(request):
     """
@@ -112,6 +113,7 @@ def payment_callback(request):
 
 
 @api_view(['GET'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([AllowAny])
 def payment_status(request, transaction_id):
     """
@@ -142,6 +144,7 @@ def payment_status(request, transaction_id):
 
 
 @api_view(['POST'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([AllowAny])
 def create_payment_link(request):
     """Create a payment link for manual/shareable payments."""
