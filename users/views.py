@@ -3,7 +3,7 @@
 from rest_framework import status, permissions
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.response import Response
-import secrets
+from rest_framework.authtoken.models import Token
 import re
 from django.utils import timezone
 from datetime import timedelta
@@ -15,13 +15,28 @@ from verification.models import EmailVerification
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def get_user_from_token(request):
-    """Extract user from session token in Authorization header."""
+    """Extract user from Authorization header — supports both Token and Bearer."""
     auth_header = request.headers.get('Authorization', '')
-    if not auth_header.startswith('Bearer '):
+
+    token_key = None
+    if auth_header.startswith('Token '):
+        token_key = auth_header.split(' ')[1]
+    elif auth_header.startswith('Bearer '):
+        token_key = auth_header.split(' ')[1]
+
+    if not token_key:
         return None
-    token = auth_header.split(' ')[1]
+
+    # Check DRF authtoken table first
     try:
-        session = UserSession.objects.filter(token=token).first()
+        token_obj = Token.objects.select_related('user').get(key=token_key)
+        return token_obj.user
+    except Token.DoesNotExist:
+        pass
+
+    # Fall back to legacy UserSession table
+    try:
+        session = UserSession.objects.filter(token=token_key).first()
         if not session:
             return None
         if session.expires_at < timezone.now():
@@ -40,7 +55,7 @@ def get_user_from_token(request):
 def register(request):
     """Register a new user — requires email verification before login."""
     import sys
-    
+
     try:
         username = request.data.get('username', '').strip()
         email    = request.data.get('email', '').strip()
@@ -59,7 +74,6 @@ def register(request):
         if len(password) < 8:
             return Response({'error': 'Password must be at least 8 characters.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # If email exists but is unverified, delete and allow re-registration
         existing_user = User.objects.filter(email=email).first()
         if existing_user:
             if existing_user.email_verified:
@@ -70,7 +84,6 @@ def register(request):
         if User.objects.filter(username=username).exists():
             return Response({'error': 'Username already taken.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Use create_user — handles password hashing automatically
         user = User.objects.create_user(
             username=username,
             email=email,
@@ -83,7 +96,7 @@ def register(request):
 
         EmailVerification.objects.filter(email=email, is_verified=False).delete()
 
-        code = generate_6digit_code()
+        code       = generate_6digit_code()
         expires_at = timezone.now() + timedelta(minutes=15)
 
         EmailVerification.objects.create(
@@ -94,7 +107,6 @@ def register(request):
             expires_at=expires_at,
         )
 
-        # Send email in background (won't block on errors)
         try:
             send_verification_email(email, code, 'email_verify')
             print(f"[REGISTER] Verification email sent to {email}", file=sys.stderr, flush=True)
@@ -121,7 +133,7 @@ def register(request):
 @authentication_classes([])
 @permission_classes([permissions.AllowAny])
 def login(request):
-    """Login and return session token."""
+    """Login and return DRF token."""
     email    = request.data.get('email', '').strip()
     password = request.data.get('password', '')
 
@@ -142,28 +154,18 @@ def login(request):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # ✅ Use Django's check_password instead of custom verify_password
         if not user.check_password(password):
             return Response({'error': 'Invalid email or password.'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        token      = secrets.token_hex(32)
-        expires_at = timezone.now() + timedelta(days=7)
-
-        UserSession.objects.create(
-            user=user,
-            token=token,
-            ip_address=request.META.get('REMOTE_ADDR', ''),
-            user_agent=request.META.get('HTTP_USER_AGENT', ''),
-            expires_at=expires_at,
-        )
+        # ── Use DRF token ─────────────────────────────────────────────────────
+        token, _ = Token.objects.get_or_create(user=user)
 
         user.last_login    = timezone.now()
         user.last_login_ip = request.META.get('REMOTE_ADDR', '')
         user.save()
 
         return Response({
-            'token':      token,
-            'expires_at': expires_at.isoformat(),
+            'token': token.key,
             'user': {
                 'user_id':    str(user.user_id),
                 'email':      user.email,
@@ -182,17 +184,22 @@ def login(request):
 @authentication_classes([])
 @permission_classes([permissions.AllowAny])
 def logout(request):
-    """Invalidate session token."""
+    """Invalidate token."""
     auth_header = request.headers.get('Authorization', '')
-    if not auth_header.startswith('Bearer '):
+
+    token_key = None
+    if auth_header.startswith('Token '):
+        token_key = auth_header.split(' ')[1]
+    elif auth_header.startswith('Bearer '):
+        token_key = auth_header.split(' ')[1]
+
+    if not token_key:
         return Response({'error': 'No token provided.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    token = auth_header.split(' ')[1]
-    try:
-        UserSession.objects.filter(token=token).delete()
-        return Response({'message': 'Logged out successfully.'})
-    except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    Token.objects.filter(key=token_key).delete()
+    UserSession.objects.filter(token=token_key).delete()
+
+    return Response({'message': 'Logged out successfully.'})
 
 
 @api_view(['POST'])
@@ -226,7 +233,6 @@ def verify_email(request):
     verification.is_verified = True
     verification.save()
 
-    # Welcome email — failure here does not break verification
     try:
         from verification.email_service import send_welcome_email
         send_welcome_email(user.email, user.username)
@@ -270,10 +276,18 @@ def resend_verification(request):
 
     send_verification_email(email, code, 'email_verify')
 
-    import sys
-    print(f"[RESEND] Verification code sent to {email}", file=sys.stderr, flush=True)
-
     return Response({'message': 'Verification code sent. Check your email.'})
+
+
+@api_view(['GET'])
+@authentication_classes([])
+@permission_classes([permissions.AllowAny])
+def verification_status(request):
+    """Check if the current user's email is verified."""
+    user = get_user_from_token(request)
+    if not user:
+        return Response({'error': 'Unauthorized.'}, status=status.HTTP_401_UNAUTHORIZED)
+    return Response({'email_verified': user.email_verified})
 
 
 # ─── Profile ──────────────────────────────────────────────────────────────────
@@ -324,16 +338,18 @@ def change_password(request):
     if not old_password or not new_password:
         return Response({'error': 'old_password and new_password are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # ✅ Use Django's check_password instead of custom verify_password
     if not user.check_password(old_password):
         return Response({'error': 'Current password is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
 
     if len(new_password) < 8:
         return Response({'error': 'New password must be at least 8 characters.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # ✅ Use Django's set_password instead of custom hash_password
     user.set_password(new_password)
     user.save()
+
+    # Refresh DRF token after password change
+    Token.objects.filter(user=user).delete()
+    Token.objects.create(user=user)
 
     return Response({'message': 'Password changed successfully.'})
 
