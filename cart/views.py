@@ -224,6 +224,7 @@ def add_to_cart(request):
 
 
 @api_view(['PUT'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def update_cart_item(request, item_id):
     """Update quantity of a cart item"""
@@ -257,6 +258,7 @@ def update_cart_item(request, item_id):
 
 
 @api_view(['DELETE'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def remove_from_cart(request, item_id):
     """Remove an item from cart"""
@@ -280,6 +282,7 @@ def remove_from_cart(request, item_id):
 
 
 @api_view(['DELETE'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def clear_cart(request, cart_id):
     """Clear all items from cart"""
@@ -300,6 +303,7 @@ def clear_cart(request, cart_id):
 
 
 @api_view(['POST'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def merge_cart(request):
     """Merge guest cart into user cart on login"""
