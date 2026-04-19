@@ -4,8 +4,9 @@ import json
 import logging
 
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import AllowAny
+from rest_framework.authentication import TokenAuthentication, SessionAuthentication
 from rest_framework.response import Response
 
 from payments.models import MpesaTransaction
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 @api_view(['POST'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([AllowAny])
 def initiate_payment(request):
     """Initiate M-Pesa STK Push payment."""

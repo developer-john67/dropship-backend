@@ -1,7 +1,8 @@
 # cart/views.py
 
 from rest_framework import status, permissions
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework.authentication import TokenAuthentication, SessionAuthentication
 from rest_framework.response import Response
 from django.utils import timezone
 import uuid
@@ -80,6 +81,7 @@ def recalculate_cart(cart):
 
 
 @api_view(['GET'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def get_cart(request):
     """Get current cart with all items"""
@@ -96,6 +98,7 @@ def get_cart(request):
 
 
 @api_view(['POST'])
+@authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def add_to_cart(request):
     """Add an item to cart"""
