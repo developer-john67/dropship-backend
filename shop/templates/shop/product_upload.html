@@ -128,7 +128,7 @@
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label for="id_price">Price ($)</label>
+              <label for="id_price">Price (Ksh)</label>
               {{ form.price }}
             </div>
             <div class="form-group">
@@ -180,7 +180,7 @@
                   </span>
                 </div>
               </div>
-              <div class="product-price">${{ product.price }}</div>
+               <div class="product-price">Ksh{{ product.price }}</div>
             </div>
             {% endfor %}
           {% else %}

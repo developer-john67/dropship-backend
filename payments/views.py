@@ -43,11 +43,14 @@ def initiate_payment(request):
         return Response({'error': 'Amount must be at least 1 KES'}, status=status.HTTP_400_BAD_REQUEST)
 
     from payments.mpesa import initiate_mpesa_payment
+    import sys
     result = initiate_mpesa_payment(order_id, phone_number, amount)
-
+    print(f"[DEBUG] M-Pesa result: {result}", file=sys.stderr)
+    
     if result.get('success'):
         return Response(result, status=status.HTTP_200_OK)
     else:
+        print(f"[DEBUG] M-Pesa error: {result.get('error')}", file=sys.stderr)
         return Response(result, status=status.HTTP_400_BAD_REQUEST)
 
 

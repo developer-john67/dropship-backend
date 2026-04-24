@@ -259,18 +259,25 @@ def initiate_mpesa_payment(order_id, phone_number, amount):
     Returns:
         dict with payment initiation result
     """
+    import sys
+    print(f"[MPESA] initiate_mpesa_payment called: order_id={order_id}, phone={phone_number}, amount={amount}", file=sys.stderr)
+    
     from payments.models import MpesaTransaction
 
     formatted_phone = format_phone_number(phone_number)
     if not formatted_phone:
+        print(f"[MPESA] Invalid phone format: {phone_number}", file=sys.stderr)
         return {'success': False, 'error': 'Invalid phone number format'}
 
     daraja = DarajaService()
+    print(f"[MPESA] Daraja service created, consumer_key present: {bool(daraja.consumer_key)}", file=sys.stderr)
+    
     result = daraja.initiate_stk_push(
         phone_number='+' + formatted_phone,
         amount=amount,
         order_id=order_id,
     )
+    print(f"[MPESA] STK Push result: {result}", file=sys.stderr)
 
     if result.get('success'):
         MpesaTransaction.objects.create(

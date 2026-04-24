@@ -1,5 +1,3 @@
-# orders/views.py
-
 from rest_framework import status, permissions
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.authentication import TokenAuthentication, SessionAuthentication
@@ -43,7 +41,22 @@ def is_admin(user) -> bool:
     return user.user_type == 'admin' or user.is_staff
 
 
-# ─── Customer Views ───────────────────────────────────────────────────────────
+# Helper: send ticket safely
+
+def _send_ticket_safe(order):
+    """Fetch order items and fire the ticket email. Logs on error, never raises."""
+    try:
+        from .emails import send_order_ticket
+        items = list(OrderItem.objects.filter(order_id=order.order_id))
+        send_order_ticket(order, items)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).error(
+            f"[EMAIL] Ticket send failed for order {order.order_number}: {exc}"
+        )
+
+
+# Customer Views 
 
 @api_view(['GET'])
 @authentication_classes([TokenAuthentication, SessionAuthentication])
@@ -79,7 +92,6 @@ def order_detail(request, order_id):
     order_items = list(OrderItem.objects.filter(order_id=order_id))
     history = list(OrderStatusHistory.objects.filter(order_id=order_id))
 
-    # Build response dict manually to avoid __setitem__ type issues
     data = OrderSerializer(order).data
     response_data = {
         **data,
@@ -102,7 +114,6 @@ def create_order(request):
     if not user:
         return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
 
-    # Build data dict cleanly
     data = {
         **request.data,
         'user_id': str(user.user_id),
@@ -117,7 +128,6 @@ def create_order(request):
 
     order = serializer.save()
 
-    # Save order items
     items_data = request.data.get('items', [])
     for item_data in items_data:
         enriched_item = {
@@ -129,7 +139,6 @@ def create_order(request):
         if item_serializer.is_valid():
             item_serializer.save()
 
-    # Log initial status
     OrderStatusHistory.objects.create(
         history_id=uuid.uuid4(),
         order_id=order.order_id,
@@ -185,7 +194,7 @@ def cancel_order(request, order_id):
     return Response(OrderSerializer(order).data)
 
 
-# ─── Admin Views ──────────────────────────────────────────────────────────────
+# Admin Views 
 
 @api_view(['GET'])
 @authentication_classes([TokenAuthentication, SessionAuthentication])
@@ -196,9 +205,7 @@ def admin_order_list(request):
     if not is_admin(user):
         return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
 
-    # Default: only show PAID orders
     payment_filter = request.query_params.get('payment_status', 'paid')
-    
     orders = list(Order.objects.all())
     
     if payment_filter:
@@ -247,7 +254,6 @@ def admin_update_order_status(request, order_id):
 
     order.save()
 
-    # user is guaranteed non-None here since is_admin passed
     changed_by_name = f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip()
 
     OrderStatusHistory.objects.create(
@@ -413,38 +419,48 @@ def check_mpesa_payment(request):
 @authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def daraja_webhook(request):
-    """Handle Daraja webhook for payment updates."""
+    """
+    Handle Daraja webhook for payment updates.
+    Fires the order ticket email when payment is confirmed.
+    """
     try:
         data = request.data
         
-        transaction_id = data.get('transaction_id')
-        status = data.get('status')
-        amount = data.get('amount')
-        phone = data.get('phone')
-        mpesa_receipt = data.get('mpesa_receipt')
-        reference = data.get('reference')
+        transaction_id  = data.get('transaction_id')
+        incoming_status = data.get('status')
+        amount          = data.get('amount')
+        phone           = data.get('phone')
+        mpesa_receipt   = data.get('mpesa_receipt')
+        reference       = data.get('reference')
         
-        if transaction_id and status == 'success':
+        if transaction_id and incoming_status == 'success':
             try:
                 order = Order.objects.get(order_id=reference)
-                order.payment_status = 'paid'
-                order.transaction_id = mpesa_receipt or transaction_id
-                order.payment_details = {
-                    'daraja_transaction_id': transaction_id,
-                    'mpesa_receipt': mpesa_receipt,
-                    'phone': phone,
-                    'amount': amount,
-                }
-                order.save()
-                
-                OrderStatusHistory.objects.create(
-                    history_id=uuid.uuid4(),
-                    order_id=order.order_id,
-                    order_number=order.order_number,
-                    status='paid',
-                    note=f'Payment received via Daraja. Receipt: {mpesa_receipt}',
-                    created_at=datetime.utcnow(),
-                )
+
+                # Only update + email if not already paid (idempotency guard)
+                if order.payment_status != 'paid':
+                    order.payment_status = 'paid'
+                    order.transaction_id = mpesa_receipt or transaction_id
+                    order.payment_details = {
+                        'daraja_transaction_id': transaction_id,
+                        'mpesa_receipt':         mpesa_receipt,
+                        'phone':                 phone,
+                        'amount':                amount,
+                    }
+                    order.save()
+
+                    OrderStatusHistory.objects.create(
+                        history_id=uuid.uuid4(),
+                        order_id=order.order_id,
+                        order_number=order.order_number,
+                        status='paid',
+                        note=f'Payment received via Daraja. Receipt: {mpesa_receipt}',
+                        created_at=datetime.utcnow(),
+                    )
+
+                    # Send order ticket email
+                    _send_ticket_safe(order)
+
             except Order.DoesNotExist:
                 logger.error(f"Order not found for webhook: {reference}")
         
@@ -459,58 +475,77 @@ def daraja_webhook(request):
 @authentication_classes([TokenAuthentication, SessionAuthentication])
 @permission_classes([permissions.AllowAny])
 def mpesa_callback(request):
-    """Handle M-Pesa payment callback (webhook)."""
+    """
+    Handle M-Pesa STK Push callback from Safaricom.
+    Fires the order ticket email when payment is confirmed (ResultCode == 0).
+    """
     try:
         data = request.data
         
-        result_code = data.get('Body', {}).get('stkCallback', {}).get('ResultCode')
-        result_desc = data.get('Body', {}).get('stkCallback', {}).get('ResultDesc')
-        checkout_request_id = data.get('Body', {}).get('stkCallback', {}).get('CheckoutRequestID')
-        merchant_request_id = data.get('Body', {}).get('stkCallback', {}).get('MerchantRequestID')
+        result_code          = data.get('Body', {}).get('stkCallback', {}).get('ResultCode')
+        result_desc          = data.get('Body', {}).get('stkCallback', {}).get('ResultDesc')
+        checkout_request_id  = data.get('Body', {}).get('stkCallback', {}).get('CheckoutRequestID')
+        merchant_request_id  = data.get('Body', {}).get('stkCallback', {}).get('MerchantRequestID')
         
-        callback_items = data.get('Body', {}).get('stkCallback', {}).get('CallbackMetadata', {}).get('Item', [])
+        callback_items = (
+            data.get('Body', {})
+                .get('stkCallback', {})
+                .get('CallbackMetadata', {})
+                .get('Item', [])
+        )
         
         mpesa_receipt_number = ''
-        phone_number = ''
-        amount = ''
-        transaction_date = ''
+        phone_number         = ''
+        amount               = ''
+        transaction_date     = ''
         
         for item in callback_items:
-            if item.get('Name') == 'MpesaReceiptNumber':
+            name = item.get('Name')
+            if name == 'MpesaReceiptNumber':
                 mpesa_receipt_number = item.get('Value', '')
-            elif item.get('Name') == 'PhoneNumber':
+            elif name == 'PhoneNumber':
                 phone_number = item.get('Value', '')
-            elif item.get('Name') == 'Amount':
+            elif name == 'Amount':
                 amount = item.get('Value', '')
-            elif item.get('Name') == 'TransactionDate':
+            elif name == 'TransactionDate':
                 transaction_date = item.get('Value', '')
         
         if result_code == 0:
-            account_reference = data.get('Body', {}).get('stkCallback', {}).get('AccountReference', '')
+            account_reference = (
+                data.get('Body', {})
+                    .get('stkCallback', {})
+                    .get('AccountReference', '')
+            )
             
             try:
                 order = Order.objects.get(order_id=account_reference)
-                order.payment_status = 'paid'
-                order.transaction_id = mpesa_receipt_number
-                order.payment_details = {
-                    'mpesa_receipt_number': mpesa_receipt_number,
-                    'phone_number': phone_number,
-                    'amount': amount,
-                    'transaction_date': transaction_date,
-                    'checkout_request_id': checkout_request_id,
-                    'merchant_request_id': merchant_request_id
-                }
-                order.save()
-                
-                OrderStatusHistory.objects.create(
-                    history_id=uuid.uuid4(),
-                    order_id=order.order_id,
-                    order_number=order.order_number,
-                    status='paid',
-                    note=f'Payment received via M-Pesa. Receipt: {mpesa_receipt_number}',
-                    created_at=datetime.utcnow(),
-                )
-                
+
+                # Idempotency guard — only process once
+                if order.payment_status != 'paid':
+                    order.payment_status = 'paid'
+                    order.transaction_id = mpesa_receipt_number
+                    order.payment_details = {
+                        'mpesa_receipt_number': mpesa_receipt_number,
+                        'phone_number':         phone_number,
+                        'amount':               amount,
+                        'transaction_date':     transaction_date,
+                        'checkout_request_id':  checkout_request_id,
+                        'merchant_request_id':  merchant_request_id,
+                    }
+                    order.save()
+                    
+                    OrderStatusHistory.objects.create(
+                        history_id=uuid.uuid4(),
+                        order_id=order.order_id,
+                        order_number=order.order_number,
+                        status='paid',
+                        note=f'Payment received via M-Pesa. Receipt: {mpesa_receipt_number}',
+                        created_at=datetime.utcnow(),
+                    )
+
+                    # Send order ticket email
+                    _send_ticket_safe(order)
+
             except Order.DoesNotExist:
                 logger.error(f"Order not found for callback: {account_reference}")
         
