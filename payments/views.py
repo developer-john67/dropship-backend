@@ -125,22 +125,29 @@ def payment_callback(request):
 @permission_classes([AllowAny])
 def payment_status(request, transaction_id):
     """
-    Check payment status — first tries the local DB, then polls Daraja if still pending.
+    Check payment status — accepts either transaction_id or checkout_request_id,
+    then polls Daraja if still pending.
     """
+    # Try to find transaction by transaction_id first, then by checkout_request_id
+    txn = None
     try:
         txn = MpesaTransaction.objects.get(transaction_id=transaction_id)
     except MpesaTransaction.DoesNotExist:
-        return Response({'error': 'Transaction not found'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            txn = MpesaTransaction.objects.get(checkout_request_id=transaction_id)
+        except MpesaTransaction.DoesNotExist:
+            return Response({'error': 'Transaction not found'}, status=status.HTTP_404_NOT_FOUND)
 
     # If still pending, sync with Daraja before responding
-    if txn.is_pending:
+    if txn.is_pending and txn.checkout_request_id:
         from payments.mpesa import check_payment_status
-        check_payment_status(transaction_id)
+        check_payment_status(txn.checkout_request_id)
         txn.refresh_from_db()
 
     return Response({
         'success': True,
         'transaction_id': txn.transaction_id,
+        'checkout_request_id': txn.checkout_request_id,
         'status': txn.status,
         'amount': str(txn.amount),
         'phone_number': txn.phone_number,
