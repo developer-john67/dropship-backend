@@ -1,5 +1,4 @@
 /** const API_BASE = window.location.origin + '/api'; **/
-// Update this to your production backend URL
 const API_BASE = window.location.hostname === 'localhost' 
     ? 'http://localhost:8000/api' 
     : 'https://dropship-backend-otgc.onrender.com/api';
@@ -13,9 +12,9 @@ function getCSRFToken() {
   return cookie ? cookie.split('=')[1] : '';
 }
 
-// ─── IMAGE URL HELPER ─────────────────────────────────────────────────────────
+// IMAGE URL HELPER
 function getImageUrl(product) {
-    const raw = product.main_image || product.image || product.image_url || '';
+    const raw = product.product_image || product.main_image || product.image || product.image_url || '';
     if (!raw) return 'https://placehold.co/300x200';
     if (raw.startsWith('http')) return raw;
     return `${BACKEND_URL}${raw}`;
@@ -42,7 +41,7 @@ async function request(endpoint, method = 'GET', body = null) {
 
   const response = await fetch(`${API_BASE}${endpoint}`, options);
 
-  // ─── Handle 401: clear bad token and retry without auth ──────────────────
+  //Handle 401: clear bad token and retry without auth
   if (response.status === 401 && token) {
     localStorage.removeItem('authToken');
     localStorage.removeItem('authUser');
